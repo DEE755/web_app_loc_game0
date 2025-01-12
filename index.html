@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Android Location Game</title>
+</head>
+<body>
+  <h1>Android Location Game DDDN</h1>
+  <p id="description">This app doesn't need UI; it should run in the background to communicate with our Android app, but we can still make a UI to control the game.</p>
+  <p id="dateTime"></p>
+  <div id="busStations"></div>
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-analytics.js";
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyAREoWfTLWCTrh0qcpsk-dPdY97ifYzkqM",
+      authDomain: "android-location-game0.firebaseapp.com",
+      databaseURL: "https://android-location-game0-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "android-location-game0",
+      storageBucket: "android-location-game0.firebasestorage.app",
+      messagingSenderId: "51208993076",
+      appId: "1:51208993076:web:80000819a15f1756934d61",
+      measurementId: "G-7ZG2TMZ1DY"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+
+    // Function to fetch bus stations data from OSM using Overpass API
+    async function fetchBusStations(longitude, latitude, radius) {
+      const overpassUrl = 'https://overpass-api.de/api/interpreter';
+      const query = `
+        [out:json];
+        (
+          node["highway"="bus_stop"](around:${radius},${latitude},${longitude});
+        );
+        out body;
+      `;
+      try {
+        const response = await fetch(overpassUrl, {
+          method: 'POST',
+          body: query,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        });
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        const data = await response.json();
+        displayBusStations(data);
+      } catch (error) {
+        console.error('There has been a problem with your fetch operation:', error);
+      }
+    }
+
+    // Function to display bus stations data
+    function displayBusStations(data) {
+      const busStationsElement = document.getElementById('busStations');
+      busStationsElement.innerHTML = '<h2>Bus Stations</h2>';
+      const list = document.createElement('ul');
+      data.elements.forEach(station => {
+        const listItem = document.createElement('li');
+        listItem.textContent = station.tags.name || 'Unnamed Station';
+        list.appendChild(listItem);
+      });
+      busStationsElement.appendChild(list);
+    }
+
+    // Example usage
+    fetchBusStations(2.3522, 48.8566, 1000); // Longitude, Latitude, Radius in meters
+
+    // Script to display the current day and time
+    function displayDateTime() {
+      const now = new Date();
+      const day = now.toLocaleDateString('en-US', { weekday: 'long' });
+      const time = now.toLocaleTimeString('en-US');
+      const dateTimeElement = document.getElementById('dateTime');
+      dateTimeElement.textContent = `Today is ${day}, and the current time is ${time}`;
+    }
+
+    displayDateTime();
+  </script>
+</body>
+</html>

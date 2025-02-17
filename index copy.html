@@ -74,27 +74,15 @@
         <!-- Data will be populated here -->
       </tbody>
     </table>
-    <h2>Top 10 Players</h2>
-    <table id="topPlayersTable">
-      <thead>
-        <tr>
-          <th>Rank</th>
-          <th>Name</th>
-          <th>Score</th>
-        </tr>
-      </thead>
-      <tbody>
-        <!-- Top 10 players will be populated here -->
-      </tbody>
-    </table>
   </div>
   <script type="module">
     // Import the functions you need from the SDKs you need
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-analytics.js";
-    import { getDatabase, ref, onValue, onChildAdded, onChildRemoved, remove, set, get, update, onChildChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+    import { getDatabase, ref, onValue, onChildAdded, onChildRemoved, remove, set, get } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
 
     // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
     const firebaseConfig = {
       apiKey: "AIzaSyAREoWfTLWCTrh0qcpsk-dPdY97ifYzkqM",
       authDomain: "android-location-game0.firebaseapp.com",
@@ -110,53 +98,6 @@
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
     const db = getDatabase(app);
-
-    // Function to update player ranks based on their scores
-    async function updatePlayerRanks() {
-      const allPlayersRef = ref(db, 'all_players');
-      const snapshot = await get(allPlayersRef);
-      if (snapshot.exists()) {
-        const players = snapshot.val();
-        const playerArray = Object.keys(players).map(key => ({
-          key,
-          ...players[key]
-        }));
-
-        // Sort players by score in descending order
-        playerArray.sort((a, b) => b.currentScore - a.currentScore);
-
-        // Update rank for each player
-        for (let i = 0; i < playerArray.length; i++) {
-          const player = playerArray[i];
-          const rank = i + 1;
-          await update(ref(db, `all_players/${player.key}`), { rank });
-          console.log(`Updated rank for player ${player.key}: ${rank}`);
-        }
-
-        // Display top 10 players
-        displayTopPlayers(playerArray.slice(0, 10));
-      } else {
-        console.log('No players found in all_players node');
-      }
-    }
-
-    // Function to display top 10 players
-    function displayTopPlayers(players) {
-      const topPlayersTableBody = document.getElementById('topPlayersTable').getElementsByTagName('tbody')[0];
-      topPlayersTableBody.innerHTML = ''; // Clear existing data
-      players.forEach((player, index) => {
-        const row = topPlayersTableBody.insertRow();
-        const rankCell = row.insertCell(0);
-        const nameCell = row.insertCell(1);
-        const scoreCell = row.insertCell(2);
-        rankCell.textContent = index + 1;
-        nameCell.textContent = player.name || 'No Name';
-        scoreCell.textContent = player.currentScore || 'No Score';
-      });
-    }
-
-    // Call the function to update player ranks
-    updatePlayerRanks();
 
     // Reference to the 'online_players' node
     const onlinePlayersRef = ref(db, 'online_players');
@@ -184,21 +125,28 @@
             longitudeCell.textContent = player.longitude || 'No Longitude';
 
             // Fetch the first station name from the list_of_objects
-            const listOfObjectsRef = ref(db, `online_players/${key}/list_of_objects_to_collect`);
+            const listOfObjectsRef = ref(db, `online_players/${key}/list_of_objects`);
             get(listOfObjectsRef).then((snapshot) => {
               if (snapshot.exists()) {
                 const listOfObjects = snapshot.val();
                 if (listOfObjects.length > 0) {
+                  // Shuffle the entire list using Fisher-Yates algorithm
+                  for (let i = listOfObjects.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [listOfObjects[i], listOfObjects[j]] = [listOfObjects[j], listOfObjects[i]];
+                  }
+
                   // Filter stations within the specified radius
                   const stationsWithinRadius = listOfObjects.filter(station => {
                     // Add your logic to check if the station is within the specified radius
                     return isWithinRadius(station);
                   });
 
-                  
+                  // Select the first 30 stations
+                  const randomStations = stationsWithinRadius.slice(0, 20);
 
-                  // Update the first station cell with the name of the first station
-                  firstStationCell.textContent = selectedStations.length > 0 ? selectedStations[0].name || 'No Station Name' : 'No Station Name';
+                  // Update the first station cell with the name of the first random station
+                  firstStationCell.textContent = randomStations.length > 0 ? randomStations[0].name || 'No Station Name' : 'No Station Name';
                 } else {
                   firstStationCell.textContent = 'No Station Name';
                 }
@@ -220,8 +168,9 @@
 
     // Listen for child added events to create a list of 30 objects from OSM and store it in the database
     onChildAdded(onlinePlayersRef, async (snapshot) => {
+     
       const key = snapshot.key;
-      const player = snapshot.val(); // Retrieve the player object from the snapshot
+      const player = snapshot.val();
       console.log('New player added:', player);
 
       // Fetch data from OSM and create a list of 30 objects
@@ -230,18 +179,11 @@
       const radius = 1000; // 1 km radius
       const listOfObjects = await fetchBusStations(longitude, latitude, radius);
 
-      // Log the fetched list of objects
-      console.log('Fetched list of objects:', listOfObjects);
-
-      // KEEP Select the first 30 stations
-      const selectedStations = listOfObjects.sort(() => 0.5 - Math.random()).slice(0, 30);
-
-      //KEEP Log the selected stations
-      console.log('Selected stations:', selectedStations);
+ 
 
       // Store the list of objects in the database under "list_of_objects"
       const listOfObjectsRef = ref(db, `online_players/${key}/list_of_objects_to_collect`);
-      await set(listOfObjectsRef, selectedStations).then(() => {
+      await set(listOfObjectsRef, listOfObjects).then(() => {
         console.log(`List of objects stored in the database for player:/${key}`);
       }).catch((error) => {
         console.error('Error storing list of objects:', error);
@@ -302,7 +244,7 @@
         console.log('Data:', data); // Debugging information
 
         // Create a list of 30 objects from the fetched data
-        const listOfObjects = data.elements.sort(() => 0.5 - Math.random()).slice(0, 30).map((element, index) => ({
+        const listOfObjects = data.elements.slice(0, 20).map((element, index) => ({
           id: index + 1,
           name: element.tags.name || 'Unnamed Station',
           latitude: element.lat,
@@ -321,9 +263,9 @@
       const busStationsElement = document.getElementById('busStations');
       busStationsElement.innerHTML = '<h2>Bus Stations</h2>';
       const list = document.createElement('ul');
-      data.forEach(station => {
+      data.elements.forEach(station => {
         const listItem = document.createElement('li');
-        listItem.textContent = station.name || 'Unnamed Station';
+        listItem.textContent = station.tags.name || 'Unnamed Station';
         list.appendChild(listItem);
       });
       busStationsElement.appendChild(list);
@@ -367,10 +309,13 @@
           const radius = 1000; // 1 km radius
           const listOfObjects = await fetchBusStations(longitude, latitude, radius);
 
-          
-
-          // Remove the line that updates the player's last active timestamp
-          // await update(ref(db, `online_players/${playerKey}`), { lastActive: Date.now() });
+          // Store the list of objects in the database under "list_of_objects"
+          const listOfObjectsRef = ref(db, `online_players/${playerKey}/list_of_objects_to_collect`);
+          await set(listOfObjectsRef, listOfObjects).then(() => {
+            console.log(`List of objects stored in the database for player:/${playerKey}`);
+          }).catch((error) => {
+            console.error('Error storing list of objects:', error);
+          });
         } else {
           console.error('Player not found');
         }
@@ -390,25 +335,8 @@
 
     // Function to check if a station is within the specified radius
     function isWithinRadius(station) {
-      const playerLongitude = parseFloat(document.getElementById('longitude').value);
-      const playerLatitude = parseFloat(document.getElementById('latitude').value);
-      const stationLongitude = station.longitude;
-      const stationLatitude = station.latitude;
-
-      const R = 6371e3; // metres
-      const φ1 = playerLatitude * Math.PI/180; // φ, λ in radians
-      const φ2 = stationLatitude * Math.PI/180;
-      const Δφ = (stationLatitude - playerLatitude) * Math.PI/180;
-      const Δλ = (stationLongitude - playerLongitude) * Math.PI/180;
-
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-      const distance = R * c; // in metres
-
-      return distance <= 1000;
+      // Add your logic to calculate the distance and check if it's within the radius
+      return true; // Placeholder, replace with actual logic
     }
   </script>
 </body>
